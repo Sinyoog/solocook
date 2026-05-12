@@ -3,20 +3,33 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class FirebaseService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// 레시피 이름을 받아서 해당 레시피의 클릭수를 1 증가시킵니다.
+  // 1. [기록하기] 사용자가 클릭하면 서버의 count를 1 올립니다.
   static Future<void> addRecipeClick(String recipeName) async {
     try {
-      // 'recipe_clicks' 컬렉션(폴더) 내에 레시피 이름의 문서(파일)를 지정
-      DocumentReference docRef = _db.collection('recipe_clicks').doc(recipeName);
-
-      await docRef.set({
-        'count': FieldValue.increment(1), // 서버에서 기존 값에 +1 연산
-        'lastUpdate': FieldValue.serverTimestamp(), // 서버 기준 현재 시간 저장
-      }, SetOptions(merge: true)); // 기존 데이터가 있으면 유지하며 합침
-
-      print("🔥 [Firebase] $recipeName 클릭수 업데이트 성공!");
+      await _db.collection('recipe_clicks').doc(recipeName).set({
+        'count': FieldValue.increment(1), // 기존 값에 +1 (원자적 연산)
+        'lastUpdate': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      print("🔥 [Firebase] $recipeName 카운트 업!");
     } catch (e) {
       print("❌ [Firebase] 업데이트 실패: $e");
+    }
+  }
+
+  // 2. [가져오기] 서버에 저장된 모든 메뉴의 클릭수를 싹 긁어옵니다.
+  static Future<Map<String, int>> getClickCounts() async {
+    try {
+      QuerySnapshot snapshot = await _db.collection('recipe_clicks').get();
+
+      Map<String, int> counts = {};
+      for (var doc in snapshot.docs) {
+        // 문서 ID가 메뉴 이름이고, 그 안의 count 필드값을 가져옵니다.
+        counts[doc.id] = (doc.data() as Map<String, dynamic>)['count'] ?? 0;
+      }
+      return counts;
+    } catch (e) {
+      print("❌ [Firebase] 데이터 로드 실패: $e");
+      return {};
     }
   }
 }
