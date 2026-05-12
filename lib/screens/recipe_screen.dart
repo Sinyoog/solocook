@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/recipe_data.dart';
 import 'recipe_detail_screen.dart';
+import '../services/firebase_service.dart';
 
 class RecipeScreen extends StatelessWidget {
   final String searchQuery;
@@ -33,6 +34,9 @@ class RecipeScreen extends StatelessWidget {
               subtitle: const Text("\n터치하여 상세 조리법 보기"),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
+                // 🔥 [추가] 서버에 레시피 조회 기록 전송
+                FirebaseService.addRecipeClick(recipe['title'] ?? 'unknown_recipe');
+
                 Navigator.push(
                   context,
                   MaterialPageRoute(

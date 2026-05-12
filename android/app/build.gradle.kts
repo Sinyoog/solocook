@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    // 아래 한 줄을 추가하세요!
+    id("com.google.gms.google-services")
 }
 
 android {

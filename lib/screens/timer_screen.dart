@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/recipe_data.dart';
 import 'timer_view.dart';
+import '../services/firebase_service.dart';
 
 class TimerScreen extends StatelessWidget {
   final String searchQuery;
@@ -31,6 +32,9 @@ class TimerScreen extends StatelessWidget {
               subtitle: Text(item['category'] ?? '카테고리 없음'),
               trailing: Text("${(item['time'] ?? 0) ~/ 60}분 ${(item['time'] ?? 0) % 60}초"),
               onTap: () {
+                // 🔥 [추가] 서버에 타이머 클릭 기록 전송
+                FirebaseService.addRecipeClick(item['menu'] ?? 'unknown_timer');
+
                 Navigator.push(
                   context,
                   MaterialPageRoute(

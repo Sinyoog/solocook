@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "532879042896",
+    "project_id": "solocook-4174c",
+    "storage_bucket": "solocook-4174c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:532879042896:android:93285a865fc05f5e5f2455",
+        "android_client_info": {
+          "package_name": "com.example.cook"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8lI-0NzXZIZusUN-F_qZjRhfrhXG2LRw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
