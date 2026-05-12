@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import '../services/text_recognition_service.dart';
 import '../services/database_service.dart';
 import '../models/food_model.dart';
 import '../services/notification_service.dart';
 
 class FridgeScreen extends StatefulWidget {
-  const FridgeScreen({super.key});
+  final String searchQuery;
+
+  const FridgeScreen({super.key, required this.searchQuery});
 
   @override
   State<FridgeScreen> createState() => _FridgeScreenState();
@@ -27,7 +28,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
   }
 
   void _refreshFoodList() {
-    // [개선] 데이터 로딩 중임을 알리고 새로운 Future를 할당합니다.
     setState(() {
       _foodListFuture = _dbService.getFoods();
     });
@@ -46,7 +46,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
     showDialog(
       context: context,
-      barrierDismissible: false, // 실수로 닫히는 것 방지
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -105,7 +105,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
                 ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.isNotEmpty && dateController.text.length >= 6) {
-                      // [수정] 저장이 완료될 때까지 기다린 후 팝업을 닫습니다.
                       await _saveFood(nameController.text, dateController.text, tempAlarmOn);
                       if (context.mounted) Navigator.pop(context);
                     }
@@ -124,7 +123,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
     );
   }
 
-  // [중요] Future<void>로 변경하여 호출하는 곳에서 기다릴 수 있게 합니다.
   Future<void> _saveFood(String name, String dateStr, bool alarmOn) async {
     try {
       String cleanDate = dateStr.replaceAll(RegExp(r'[^0-9]'), '');
@@ -140,7 +138,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
       DateTime expiry = DateTime.parse(formattedDate);
 
-      // 1. DB 저장 완료 대기
       await _dbService.insertFood(FoodModel(
         name: name,
         expiryDate: expiry,
@@ -148,7 +145,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
         category: '기타',
       ));
 
-      // 2. 알람 예약 (에러가 나도 저장은 유지되도록 try-catch 분리 가능)
       try {
         if (alarmOn) {
           final notificationDate = expiry.subtract(const Duration(days: 1));
@@ -164,10 +160,9 @@ class _FridgeScreenState extends State<FridgeScreen> {
           }
         }
       } catch (e) {
-        debugPrint("알림 예약 실패(무시가능): $e");
+        debugPrint("알림 예약 실패: $e");
       }
 
-      // 3. UI 즉시 갱신
       _refreshFoodList();
 
       if (mounted) {
@@ -189,20 +184,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("나의 냉장고", style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: false,
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        actions: [
-          IconButton(
-            onPressed: _showManualInputDialog,
-            icon: const Icon(Icons.add_circle, color: Colors.orange, size: 32),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: FutureBuilder<List<FoodModel>>(
         future: _foodListFuture,
         builder: (context, snapshot) {
@@ -210,15 +191,23 @@ class _FridgeScreenState extends State<FridgeScreen> {
             return const Center(child: CircularProgressIndicator(color: Colors.orange));
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(
-              child: Text("냉장고가 비어있습니다.\n식재료를 추가해보세요!", textAlign: TextAlign.center),
-            );
+            return const Center(child: Text("냉장고가 비어있습니다."));
           }
+
+          // 검색어로 필터링 적용
+          final filteredFoods = snapshot.data!.where((food) {
+            return food.name.contains(widget.searchQuery);
+          }).toList();
+
+          if (filteredFoods.isEmpty) {
+            return const Center(child: Text("검색 결과가 없습니다."));
+          }
+
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 10),
-            itemCount: snapshot.data!.length,
+            itemCount: filteredFoods.length,
             itemBuilder: (context, index) {
-              final food = snapshot.data![index];
+              final food = filteredFoods[index];
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 elevation: 1,
@@ -241,6 +230,11 @@ class _FridgeScreenState extends State<FridgeScreen> {
           );
         },
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showManualInputDialog,
+        backgroundColor: Colors.orange,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 
@@ -257,7 +251,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

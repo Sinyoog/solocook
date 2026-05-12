@@ -1,24 +1,31 @@
 import 'package:flutter/material.dart';
 import '../data/recipe_data.dart';
-import 'recipe_detail_screen.dart'; // 상세 화면 이동을 위해 필요
+import 'recipe_detail_screen.dart';
 
 class RecipeScreen extends StatelessWidget {
-  const RecipeScreen({super.key});
+  final String searchQuery;
+
+  const RecipeScreen({super.key, required this.searchQuery});
 
   @override
   Widget build(BuildContext context) {
-    final recipes = RecipeData.specialRecipes;
+    final allRecipes = RecipeData.specialRecipes;
+    final filteredRecipes = allRecipes.where((recipe) {
+      final title = recipe['title']?.toString() ?? '';
+      return title.contains(searchQuery);
+    }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("자취 특화 레시피")),
-      body: ListView.builder(
+      body: filteredRecipes.isEmpty
+          ? const Center(child: Text("검색 결과가 없습니다."))
+          : ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: recipes.length,
+        itemCount: filteredRecipes.length,
         itemBuilder: (context, index) {
-          final recipe = recipes[index];
+          final recipe = filteredRecipes[index];
           return Card(
             elevation: 3,
-            margin: const EdgeInsets.only(bottom: 16), // .bottom에서 .only(bottom: 16)으로 수정
+            margin: const EdgeInsets.only(bottom: 16),
             child: ListTile(
               contentPadding: const EdgeInsets.all(16),
               title: Text("[${recipe['theme']}] ${recipe['title']}",
@@ -26,7 +33,6 @@ class RecipeScreen extends StatelessWidget {
               subtitle: const Text("\n터치하여 상세 조리법 보기"),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
-                // 상세 화면으로 이동하며 레시피 데이터 전달
                 Navigator.push(
                   context,
                   MaterialPageRoute(

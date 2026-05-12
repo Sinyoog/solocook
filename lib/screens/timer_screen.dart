@@ -3,19 +3,26 @@ import '../data/recipe_data.dart';
 import 'timer_view.dart';
 
 class TimerScreen extends StatelessWidget {
-  const TimerScreen({super.key});
+  final String searchQuery;
+
+  const TimerScreen({super.key, required this.searchQuery});
 
   @override
   Widget build(BuildContext context) {
-    // RecipeData.timerPresets 데이터를 가져옴
-    final presets = RecipeData.timerPresets;
+    // RecipeData.timerPresets 데이터를 가져와서 검색어로 필터링
+    final allPresets = RecipeData.timerPresets;
+    final filteredPresets = allPresets.where((item) {
+      final menuName = item['menu']?.toString() ?? '';
+      return menuName.contains(searchQuery);
+    }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("정밀 타이머")),
-      body: ListView.builder(
-        itemCount: presets.length,
-        itemBuilder: (context, index) { // index 인자 추가로 에러 해결
-          final item = presets[index];
+      body: filteredPresets.isEmpty
+          ? const Center(child: Text("검색 결과가 없습니다."))
+          : ListView.builder(
+        itemCount: filteredPresets.length,
+        itemBuilder: (context, index) {
+          final item = filteredPresets[index];
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: ListTile(
