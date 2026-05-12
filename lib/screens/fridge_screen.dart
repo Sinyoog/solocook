@@ -27,6 +27,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
     _refreshFoodList();
   }
 
+  // [수정] 데이터 로딩 상태를 명확히 하기 위해 Future를 재할당
   void _refreshFoodList() {
     setState(() {
       _foodListFuture = _dbService.getFoods();
@@ -37,6 +38,26 @@ class _FridgeScreenState extends State<FridgeScreen> {
   void dispose() {
     _recognitionService.dispose();
     super.dispose();
+  }
+
+  Future<bool?> _showDeleteDialog(String name) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("식재료 삭제"),
+        content: Text("'$name'을(를) 삭제하시겠습니까?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("아니요", style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("네", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showManualInputDialog() {
@@ -105,6 +126,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
                 ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.isNotEmpty && dateController.text.length >= 6) {
+                      // [중요] 저장이 끝날 때까지 기다린 후 팝업을 닫습니다.
                       await _saveFood(nameController.text, dateController.text, tempAlarmOn);
                       if (context.mounted) Navigator.pop(context);
                     }
@@ -138,6 +160,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
       DateTime expiry = DateTime.parse(formattedDate);
 
+      // 1. DB 저장을 'await'로 기다립니다.
       await _dbService.insertFood(FoodModel(
         name: name,
         expiryDate: expiry,
@@ -145,6 +168,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
         category: '기타',
       ));
 
+      // 2. 알림 예약 (실패해도 저장은 유지되도록 별도 try)
       try {
         if (alarmOn) {
           final notificationDate = expiry.subtract(const Duration(days: 1));
@@ -160,9 +184,10 @@ class _FridgeScreenState extends State<FridgeScreen> {
           }
         }
       } catch (e) {
-        debugPrint("알림 예약 실패: $e");
+        debugPrint("알림 에러: $e");
       }
 
+      // 3. 저장이 완료된 후 즉시 UI 갱신
       _refreshFoodList();
 
       if (mounted) {
@@ -194,7 +219,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
             return const Center(child: Text("냉장고가 비어있습니다."));
           }
 
-          // 검색어로 필터링 적용
           final filteredFoods = snapshot.data!.where((food) {
             return food.name.contains(widget.searchQuery);
           }).toList();
@@ -208,22 +232,38 @@ class _FridgeScreenState extends State<FridgeScreen> {
             itemCount: filteredFoods.length,
             itemBuilder: (context, index) {
               final food = filteredFoods[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                elevation: 1,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: food.isAlarmOn ? Colors.orange[50] : Colors.grey[100],
-                    child: Icon(
-                      food.isAlarmOn ? Icons.notifications_active : Icons.notifications_off,
-                      color: food.isAlarmOn ? Colors.orange : Colors.grey,
-                      size: 20,
+
+              return Dismissible(
+                key: Key("${food.id}_${food.expiryDate.millisecondsSinceEpoch}"), // 키 중복 방지
+                direction: DismissDirection.startToEnd,
+                confirmDismiss: (direction) => _showDeleteDialog(food.name),
+                onDismissed: (direction) async {
+                  await _dbService.deleteFood(food.id!);
+                  _refreshFoodList();
+                },
+                background: Container(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 20),
+                  color: Colors.redAccent,
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                child: Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: food.isAlarmOn ? Colors.orange[50] : Colors.grey[100],
+                      child: Icon(
+                        food.isAlarmOn ? Icons.notifications_active : Icons.notifications_off,
+                        color: food.isAlarmOn ? Colors.orange : Colors.grey,
+                        size: 20,
+                      ),
                     ),
+                    title: Text(food.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text("기한: ${food.expiryDate.toString().split(' ')[0]}"),
+                    trailing: _buildDaysLeftText(food.expiryDate),
                   ),
-                  title: Text(food.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text("기한: ${food.expiryDate.toString().split(' ')[0]}"),
-                  trailing: _buildDaysLeftText(food.expiryDate),
                 ),
               );
             },

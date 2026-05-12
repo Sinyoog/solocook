@@ -19,55 +19,67 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'fridge_master.db');
     return await openDatabase(
       path,
-      version: 2, // 컬럼이 추가되었으므로 버전을 2로 올립니다.
+      version: 2, // 개발 중 구조 변경을 위해 버전 2 유지
       onCreate: (db, version) {
+        // 처음 테이블을 만들 때 모든 컬럼(isAlarmOn 포함)을 한 번에 생성
         return db.execute(
-          // isAlarmOn 컬럼 추가 (기본값 1 = 켬)
-          'CREATE TABLE foods(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, expiryDate TEXT, category TEXT, isAlarmOn INTEGER DEFAULT 1)',
+          "CREATE TABLE foods(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, expiryDate TEXT, isAlarmOn INTEGER DEFAULT 1, category TEXT)",
         );
       },
       onUpgrade: (db, oldVersion, newVersion) {
+        // 버전 1 상태에서 이미 설치된 앱에 새로운 컬럼(isAlarmOn)을 추가할 때 실행
         if (oldVersion < 2) {
-          // 기존 사용자의 DB에도 컬럼을 추가해주는 안전 장치
           db.execute('ALTER TABLE foods ADD COLUMN isAlarmOn INTEGER DEFAULT 1');
         }
       },
     );
   }
 
+  // 데이터 추가 (식재료 등록)
   Future<void> insertFood(FoodModel food) async {
     final db = await database;
-    await db.insert('foods', food.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+        'foods',
+        food.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace
+    );
   }
 
+  // 데이터 조회 (자동 삭제 + 임박순 정렬)
   Future<List<FoodModel>> getFoods() async {
     final db = await database;
 
+    // [D-Day 삭제 로직]
+    // 오늘(2026-05-12)은 살려두고, 오늘보다 이전(어제까지) 날짜만 삭제
     DateTime now = DateTime.now();
     DateTime today = DateTime(now.year, now.month, now.day);
 
+    // expiryDate가 오늘 자정(00:00:00)보다 작으면 삭제
     await db.delete(
       'foods',
       where: 'expiryDate < ?',
       whereArgs: [today.toIso8601String()],
     );
 
-    final List<Map<String, dynamic>> maps = await db.query('foods', orderBy: 'expiryDate ASC');
+    // [임박순 정렬]
+    // expiryDate ASC: 유통기한이 가장 가까운 날짜부터 위로 나열
+    final List<Map<String, dynamic>> maps = await db.query(
+        'foods',
+        orderBy: 'expiryDate ASC'
+    );
 
     return List.generate(maps.length, (i) {
-      return FoodModel(
-        id: maps[i]['id'],
-        name: maps[i]['name'],
-        expiryDate: DateTime.parse(maps[i]['expiryDate']),
-        category: maps[i]['category'] ?? '기타',
-        // [수정] DB에서 가져온 0/1 값을 bool로 변환
-        isAlarmOn: maps[i]['isAlarmOn'] == 1,
-      );
+      return FoodModel.fromMap(maps[i]);
     });
   }
 
+  // 데이터 삭제 (스와이프 삭제 대응)
   Future<void> deleteFood(int id) async {
     final db = await database;
-    await db.delete('foods', where: 'id = ?', whereArgs: [id]);
+    await db.delete(
+        'foods',
+        where: 'id = ?',
+        whereArgs: [id]
+    );
   }
 }
