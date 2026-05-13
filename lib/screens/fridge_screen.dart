@@ -214,16 +214,27 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. 현재 테마가 다크모드인지 확인
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      // 🔥 배경색을 테마에 맞게 변경 (흰색 고정 제거)
+      backgroundColor: isDarkMode ? Colors.grey[900] : Colors.white,
       body: FutureBuilder<List<FoodModel>>(
         future: _foodListFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Colors.orange));
           }
+
+          // 2. 데이터가 없을 때 텍스트 색상 대응
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text("냉장고가 비어있습니다."));
+            return Center(
+              child: Text(
+                "냉장고가 비어있습니다.",
+                style: TextStyle(color: isDarkMode ? Colors.grey[500] : Colors.grey[400]),
+              ),
+            );
           }
 
           final filteredFoods = snapshot.data!.where((food) {
@@ -231,7 +242,12 @@ class _FridgeScreenState extends State<FridgeScreen> {
           }).toList();
 
           if (filteredFoods.isEmpty) {
-            return const Center(child: Text("검색 결과가 없습니다."));
+            return Center(
+              child: Text(
+                "검색 결과가 없습니다.",
+                style: TextStyle(color: isDarkMode ? Colors.grey[500] : Colors.grey[400]),
+              ),
+            );
           }
 
           return ListView.builder(
@@ -241,7 +257,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
               final food = filteredFoods[index];
 
               return Dismissible(
-                key: Key("${food.id}_${food.expiryDate.millisecondsSinceEpoch}"), // 키 중복 방지
+                key: Key("${food.id}_${food.expiryDate.millisecondsSinceEpoch}"),
                 direction: DismissDirection.startToEnd,
                 confirmDismiss: (direction) => _showDeleteDialog(food.name),
                 onDismissed: (direction) async {
@@ -257,18 +273,29 @@ class _FridgeScreenState extends State<FridgeScreen> {
                 child: Card(
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   elevation: 1,
+                  // 🔥 카드 배경색도 다크모드용으로 대응
+                  color: isDarkMode ? Colors.grey[850] : Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: food.isAlarmOn ? Colors.orange[50] : Colors.grey[100],
+                      // 🔥 아이콘 배경색 대응
+                      backgroundColor: food.isAlarmOn
+                          ? (isDarkMode ? Colors.orange.withValues(alpha: 0.2) : Colors.orange[50])
+                          : (isDarkMode ? Colors.grey[800] : Colors.grey[100]),
                       child: Icon(
                         food.isAlarmOn ? Icons.notifications_active : Icons.notifications_off,
                         color: food.isAlarmOn ? Colors.orange : Colors.grey,
                         size: 20,
                       ),
                     ),
-                    title: Text(food.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("기한: ${food.expiryDate.toString().split(' ')[0]}"),
+                    title: Text(
+                        food.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold)
+                    ),
+                    subtitle: Text(
+                      "기한: ${food.expiryDate.toString().split(' ')[0]}",
+                      style: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[600]),
+                    ),
                     trailing: _buildDaysLeftText(food.expiryDate),
                   ),
                 ),
