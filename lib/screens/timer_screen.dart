@@ -49,10 +49,19 @@ class TimerScreen extends StatelessWidget {
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
                   leading: const Icon(Icons.timer_outlined, color: Colors.orange),
+                  // TimerScreen의 ListTile 내부 title 부분 수정
                   title: Row(
                     children: [
-                      Text(item['menu'] ?? '메뉴명 없음',
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      // 1. Expanded를 사용하여 글자가 차지할 수 있는 만큼만 차지하게 제한합니다.
+                      Expanded(
+                        child: Text(
+                          item['menu'] ?? '메뉴명 없음',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          // 2. 글자가 너무 길면 '...'으로 생략하거나 다음 줄로 넘깁니다.
+                          overflow: TextOverflow.ellipsis, // 말줄임표(...) 표시
+                          maxLines: 1, // 한 줄로 고정하고 싶을 때
+                        ),
+                      ),
                       if (clickCount > 0) ...[
                         const SizedBox(width: 8),
                         Container(
@@ -61,11 +70,10 @@ class TimerScreen extends StatelessWidget {
                             color: Colors.orange[100],
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Text("🔥 $clickCount",
-                              style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.bold)),
+                          child: Text(
+                            "🔥 $clickCount",
+                            style: const TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ]
                     ],

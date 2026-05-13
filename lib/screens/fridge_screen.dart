@@ -160,7 +160,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
       DateTime expiry = DateTime.parse(formattedDate);
 
-      // 1. DB 저장을 'await'로 기다립니다.
+      // 1. DB 저장
       await _dbService.insertFood(FoodModel(
         name: name,
         expiryDate: expiry,
@@ -168,26 +168,33 @@ class _FridgeScreenState extends State<FridgeScreen> {
         category: '기타',
       ));
 
-      // 2. 알림 예약 (실패해도 저장은 유지되도록 별도 try)
+      // 2. 알림 예약 로직 수정
       try {
         if (alarmOn) {
           final notificationDate = expiry.subtract(const Duration(days: 1));
-          final scheduledAt = DateTime(notificationDate.year, notificationDate.month, notificationDate.day, 9, 0);
+          // 기본 알림 시간: 유통기한 하루 전 오전 9시
+          DateTime scheduledAt = DateTime(notificationDate.year, notificationDate.month, notificationDate.day, 9, 0);
 
-          if (scheduledAt.isAfter(DateTime.now())) {
-            await NotificationService().scheduleNotification(
-              id: DateTime.now().millisecond,
-              title: "유통기한 알림",
-              body: "🥛 $name의 유통기한이 하루 남았습니다!",
-              scheduledDate: scheduledAt,
-            );
+          // 🔥 [수정] 만약 예약 시간(오전 9시)이 이미 지났다면?
+          if (scheduledAt.isBefore(DateTime.now())) {
+            // 오늘이 유통기한 전날인데 이미 9시가 넘었거나, 유통기한 당일인 경우
+            // 테스트 및 사용자 인지를 위해 '지금부터 5초 뒤'에 알림이 오도록 설정합니다.
+            scheduledAt = DateTime.now().add(const Duration(seconds: 5));
           }
+
+          await NotificationService().scheduleNotification(
+            id: DateTime.now().millisecond, // 고유 ID 부여
+            title: "유통기한 임박!",
+            body: "🥛 $name의 유통기한이 하루 남았습니다!",
+            scheduledDate: scheduledAt,
+          );
+          debugPrint("✅ 알림 예약 완료: $scheduledAt");
         }
       } catch (e) {
         debugPrint("알림 에러: $e");
       }
 
-      // 3. 저장이 완료된 후 즉시 UI 갱신
+      // 3. UI 갱신
       _refreshFoodList();
 
       if (mounted) {

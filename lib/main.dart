@@ -3,33 +3,37 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:permission_handler/permission_handler.dart'; // 🔥 추가: 권한 핸들러
 import 'screens/main_screen.dart';
 
 void main() async {
+  // 1. Flutter 엔진 초기화
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. 윈도우 DB 설정
+  // 2. 알림 권한 요청 (안드로이드 13 이상 필수)
+  // 앱 켜자마자 "알림 허용하시겠습니까?" 팝업을 띄웁니다.
+  if (Platform.isAndroid) {
+    await Permission.notification.request();
+  }
+
+  // 3. 윈도우 DB 설정
   if (Platform.isWindows || Platform.isLinux) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
 
-  // 2. Firebase 초기화
+  // 4. Firebase 초기화
   try {
     if (Platform.isWindows) {
-      // 윈도우에서는 수동으로 옵션을 넣어줘야 할 때가 있습니다.
-      // 만약 'firebase_options.dart'가 있다면 해당 파일을 import해서 쓰면 되지만,
-      // 현재 없다면 일단 아래처럼 호출해보고 에러나면 옵션을 수동으로 넣어야 합니다.
       await Firebase.initializeApp(
         options: const FirebaseOptions(
-          apiKey: "AIza...", // 여기에 콘솔에서 확인한 API 키
-          appId: "1:...",    // 여기에 앱 ID
+          apiKey: "AIza...",
+          appId: "1:...",
           messagingSenderId: "...",
           projectId: "solocook-4174c",
         ),
       );
     } else {
-      // 안드로이드/iOS는 google-services.json만 있으면 이걸로 충분합니다.
       await Firebase.initializeApp();
     }
     print("✅ Firebase 연결 성공!");
