@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 
 class TimerView extends StatefulWidget {
   final String menuName;
@@ -50,19 +51,42 @@ class _TimerViewState extends State<TimerView> {
   }
 
   void _showFinishDialog() {
+    FlutterRingtonePlayer().playAlarm();
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("요리 완료!"),
-        content: Text("${widget.menuName} 조리가 끝났습니다."),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("확인", style: TextStyle(color: Colors.orange))
-          )
-        ],
-      ),
-    );
+      barrierDismissible: true,
+      builder: (context) {
+        // 🔥 변수 선언(Timer? autoCloseTimer =) 부분을 지우고 Timer만 실행하세요.
+        Timer(const Duration(seconds: 5), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+        });
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.alarm_on, color: Colors.orange, size: 60),
+              const SizedBox(height: 15),
+              Text(
+                "${widget.menuName} 완료!",
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 5),
+              const Text("화면을 누르면 알람이 꺼집니다."),
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      FlutterRingtonePlayer().stop();
+      _resetTimer();
+    });
   }
 
   @override

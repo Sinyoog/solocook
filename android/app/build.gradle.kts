@@ -2,33 +2,36 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
-    // 아래 한 줄을 추가하세요!
+    // Firebase 구글 서비스를 위한 플러그인
     id("com.google.gms.google-services")
 }
 
 android {
+    // 1. NDK 버전: jni 등 최신 플러그인 요구 사항에 맞춰 28 버전으로 고정
+    ndkVersion = "28.2.13676358"
+
     namespace = "com.example.cook"
     compileSdk = flutter.compileSdkVersion
 
-    // 1. NDK 버전 업데이트 (에러 메시지가 요구한 버전)
-    ndkVersion = "27.0.12077973"
-
     compileOptions {
+        // 이전 버전 안드로이드 기기 지원을 위한 디슈가링 활성화
         isCoreLibraryDesugaringEnabled = true
 
-        // 2. Java 버전을 17로 업그레이드 (최신 플러그인 권장 사항)
+        // 2. Java 버전을 17로 업그레이드 (최신 플러그인 및 경고 제거용)
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        // 3. Kotlin 대상 JVM도 17로 맞춤
+        // 3. Kotlin 대상 JVM도 자바 버전과 동일하게 17로 설정
         jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId = "com.example.cook"
-        // 4. ML Kit 및 알림 기능을 위해 minSdk를 최소 21 이상으로 명시하는 것이 안전합니다.
+
+        // 4. ML Kit 및 알림 기능을 위해 minSdk는 flutter.minSdkVersion을 따르되
+        // 일반적으로 21 이상이 권장됩니다.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -37,14 +40,17 @@ android {
 
     buildTypes {
         release {
+            // 배포 시에도 일단 디버그용 서명 설정을 사용 (필요 시 추후 수정)
             signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
 
 dependencies {
-    // 최신 desugar 라이브러리 사용
+    // Java 8+ API 사용을 위한 최신 desugar 라이브러리
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // 한국어 텍스트 인식을 위한 ML Kit 라이브러리
     implementation("com.google.mlkit:text-recognition-korean:16.0.0")
 }
 

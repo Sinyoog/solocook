@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 
 class RecipeDetailScreen extends StatefulWidget {
   final Map<String, dynamic> recipe;
@@ -16,7 +17,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   Timer? _timer;
   bool _isTimerRunning = false;
 
-  // 🔥 전자레인지 요리인지 확인
   bool get _isMicrowaveRecipe => widget.recipe['isMicrowave'] ?? false;
 
   void _startCooking() {
@@ -44,7 +44,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     final steps = widget.recipe['steps'] as List;
     final currentStepText = steps[_activeStep!];
 
-    // 🔥 전자레인지 요리가 아닐 때만 '타이머:' 문구를 찾아 자동 타이머 실행
     if (!_isMicrowaveRecipe && currentStepText.contains('타이머:')) {
       _remainingSeconds = _parseTimerSeconds(currentStepText);
       _startTimer();
@@ -52,7 +51,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   }
 
   int _parseTimerSeconds(String text) {
-    // '타이머:' 또는 '권장:' 뒤의 시간을 파싱하도록 정규식 확장
     final regExp = RegExp(r'(?:타이머|권장):\s*(\d+)분(?:\s*(\d+)초)?');
     final match = regExp.firstMatch(text);
     if (match != null) {
@@ -69,29 +67,48 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       if (_remainingSeconds > 0) {
         setState(() => _remainingSeconds--);
       } else {
-        _timer?.cancel();
-        setState(() => _isTimerRunning = false);
-        _nextStep();
+        // 🔥 타이머 종료 로직 호출
+        _handleTimerFinished();
       }
     });
+  }
+
+  // 🔥 냄비 요리 타이머 종료 처리 (5초 알람)
+  void _handleTimerFinished() {
+    _timer?.cancel();
+    setState(() => _isTimerRunning = false);
+
+    // 1. 알람 소리 재생
+    FlutterRingtonePlayer().playAlarm();
+
+    // 2. 5초 뒤 자동 다음 단계 이동 (터치 안 했을 경우)
+    Future.delayed(const Duration(seconds: 5), () {
+      // 5초 후에도 여전히 해당 스텝에 머물러 있다면 (소리가 울리는 중이라면)
+      if (_activeStep != null && _remainingSeconds == 0) {
+        _stopAlarmAndNext();
+      }
+    });
+  }
+
+  // 🔥 알람 끄고 다음으로 넘어가는 공통 함수
+  void _stopAlarmAndNext() {
+    FlutterRingtonePlayer().stop();
+    _nextStep();
   }
 
   void _showFinishDialog() {
     showDialog(
       context: context,
-      // 🔥 외부 터치로도 안 꺼지게 하려면 false (자동으로만 꺼지게)
       barrierDismissible: false,
       builder: (context) {
-        // 1초 후에 자동으로 다이얼로그 닫기
         Future.delayed(const Duration(seconds: 1), () {
           if (Navigator.canPop(context)) {
             Navigator.pop(context);
-            setState(() => _activeStep = null); // 조리 상태 초기화
+            setState(() => _activeStep = null);
           }
         });
 
         return AlertDialog(
-          // 🔥 버튼(actions)을 아예 삭제했습니다.
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Center(
             child: Text("요리 완성!", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -112,6 +129,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    FlutterRingtonePlayer().stop(); // 화면 나가면 소리 끄기
     super.dispose();
   }
 
@@ -126,8 +144,12 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          // 조리 시작 후, 타이머가 돌아가는 중이 아닐 때만 터치로 다음 단계 이동
-          if (_activeStep != null && !_isTimerRunning) {
+          // 🔥 [수정] 타이머가 0이고 소리가 울리는 중(5초 대기 중)일 때 터치 처리
+          if (_activeStep != null && !_isTimerRunning && _remainingSeconds == 0) {
+            _stopAlarmAndNext();
+          }
+          // 일반적인 다음 단계 이동 (타이머가 없는 단계 또는 렌지 요리)
+          else if (_activeStep != null && !_isTimerRunning) {
             _nextStep();
           }
         },
@@ -174,7 +196,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                               const SizedBox(height: 8),
                               Text(steps[index], style: const TextStyle(fontSize: 16)),
 
-                              // 🔥 전자레인지 요리인 경우: 시간 정보만 강조해서 표시
                               if (isActive && _isMicrowaveRecipe && steps[index].contains('권장:')) ...[
                                 const SizedBox(height: 12),
                                 Container(
@@ -189,25 +210,31 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                                     children: [
                                       const Icon(Icons.microwave, color: Colors.blue, size: 18),
                                       const SizedBox(width: 8),
-                                      Text(
-                                        "조리 후 다음 단계로 넘어가려면 화면을 터치하세요",
-                                        style: TextStyle(color: isDarkMode ? Colors.blue[200] : Colors.blue[700], fontSize: 12, fontWeight: FontWeight.bold),
+                                      Expanded(
+                                        child: Text(
+                                          "조리 후 다음 단계로 넘어가려면 화면을 터치하세요",
+                                          style: TextStyle(color: isDarkMode ? Colors.blue[200] : Colors.blue[700], fontSize: 12, fontWeight: FontWeight.bold),
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
                               ],
 
-                              // 냄비 요리인 경우: 기존 진행 바 표시
-                              if (isActive && !_isMicrowaveRecipe && _remainingSeconds > 0) ...[
+                              if (isActive && !_isMicrowaveRecipe && (_remainingSeconds > 0 || (_remainingSeconds == 0 && !_isTimerRunning && _activeStep != null))) ...[
                                 const SizedBox(height: 15),
                                 LinearProgressIndicator(
-                                  value: _remainingSeconds / _parseTimerSeconds(steps[index]),
+                                  value: _remainingSeconds > 0
+                                      ? (_remainingSeconds / _parseTimerSeconds(steps[index]))
+                                      : 0,
                                   backgroundColor: Colors.orange[100],
                                   color: Colors.orange,
                                 ),
                                 const SizedBox(height: 8),
-                                Text("${_remainingSeconds ~/ 60}분 ${_remainingSeconds % 60}초 남음",
+                                Text(
+                                    _remainingSeconds > 0
+                                        ? "${_remainingSeconds ~/ 60}분 ${_remainingSeconds % 60}초 남음"
+                                        : "조리 완료! 알람 울리는 중...",
                                     style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
                               ]
                             ],
