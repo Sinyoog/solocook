@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🔥 패키지 임포트
 import 'timer_screen.dart';
 import 'recipe_screen.dart';
 import 'fridge_screen.dart';
@@ -14,11 +15,48 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   String _searchQuery = "";
+
+  // 기본값 설정
+  bool _isDarkMode = false;
   TimeOfDay _notificationTime = const TimeOfDay(hour: 9, minute: 0);
 
   @override
+  void initState() {
+    super.initState();
+    _loadSettings(); // 🔥 앱 시작 시 저장된 설정 불러오기
+  }
+
+  // 📂 폰 저장소에서 설정 불러오기
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // 저장된 값이 없으면 기본값(false, 9시 0분) 사용
+      _isDarkMode = prefs.getBool('isDarkMode') ?? false;
+      int hour = prefs.getInt('notificationHour') ?? 9;
+      int minute = prefs.getInt('notificationMinute') ?? 0;
+      _notificationTime = TimeOfDay(hour: hour, minute: minute);
+    });
+    // 불러온 다크모드 상태를 앱 전체 테마에 즉시 반영
+    widget.onThemeChanged(_isDarkMode);
+  }
+
+  // 💾 다크모드 설정 저장
+  Future<void> _saveDarkMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDarkMode', value);
+  }
+
+  // 💾 알림 시간 설정 저장
+  Future<void> _saveNotificationTime(TimeOfDay time) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('notificationHour', time.hour);
+    await prefs.setInt('notificationMinute', time.minute);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    // 테마 상태 동기화 (현재 테마가 다크인지 확인)
+    _isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     final List<Widget> _pages = [
       TimerScreen(searchQuery: _searchQuery),
@@ -53,7 +91,7 @@ class _MainScreenState extends State<MainScreen> {
                 hintText: "검색어를 입력하세요",
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
-                fillColor: isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                fillColor: _isDarkMode ? Colors.grey[800] : Colors.grey[100],
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(15),
@@ -65,7 +103,6 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
 
-      // 🔥 우측 설정 드로어 수정
       endDrawer: Drawer(
         width: MediaQuery.of(context).size.width * 0.6,
         child: Column(
@@ -82,7 +119,6 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
             ),
-            // 1. 다크모드 (FittedBox로 글자 잘림 방지)
             ListTile(
               leading: const Icon(Icons.dark_mode),
               title: const FittedBox(
@@ -91,14 +127,15 @@ class _MainScreenState extends State<MainScreen> {
                 child: Text("다크모드"),
               ),
               trailing: Switch(
-                value: isDarkMode,
+                value: _isDarkMode,
                 onChanged: (bool value) {
-                  widget.onThemeChanged(value);
+                  setState(() => _isDarkMode = value);
+                  _saveDarkMode(value); // 🔥 폰에 저장
+                  widget.onThemeChanged(value); // 앱 테마 변경
                 },
               ),
             ),
             const Divider(),
-            // 2. 알림 시간 (키보드 입력 기본 모드)
             ListTile(
               leading: const Icon(Icons.notifications_active),
               title: const FittedBox(
@@ -115,7 +152,7 @@ class _MainScreenState extends State<MainScreen> {
                 final TimeOfDay? picked = await showTimePicker(
                   context: context,
                   initialTime: _notificationTime,
-                  initialEntryMode: TimePickerEntryMode.input, // 🔥 키보드 입력이 기본으로 뜨게 설정
+                  initialEntryMode: TimePickerEntryMode.input,
                   builder: (context, child) {
                     return MediaQuery(
                       data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
@@ -125,6 +162,7 @@ class _MainScreenState extends State<MainScreen> {
                 );
                 if (picked != null) {
                   setState(() => _notificationTime = picked);
+                  _saveNotificationTime(picked); // 🔥 폰에 저장
                 }
               },
             ),

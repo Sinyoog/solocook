@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🔥 패키지 추가
 import 'screens/main_screen.dart';
 
 void main() async {
@@ -41,7 +42,6 @@ void main() async {
   runApp(const SingleCookMasterApp());
 }
 
-// 🔥 상태 변화를 감지하기 위해 StatefulWidget으로 변경!
 class SingleCookMasterApp extends StatefulWidget {
   const SingleCookMasterApp({super.key});
 
@@ -50,10 +50,25 @@ class SingleCookMasterApp extends StatefulWidget {
 }
 
 class _SingleCookMasterAppState extends State<SingleCookMasterApp> {
-  // 현재 테마 모드 상태 (기본은 라이트모드)
-  ThemeMode _themeMode = ThemeMode.light;
+  // 기본값을 system으로 두면 기기 설정에 맞게 시작하고, 저장된 값이 있으면 그걸 따릅니다.
+  ThemeMode _themeMode = ThemeMode.system;
 
-  // 🔥 설정창에서 호출할 테마 변경 함수
+  @override
+  void initState() {
+    super.initState();
+    _initTheme(); // 🔥 앱 시작 시 저장된 테마 불러오기
+  }
+
+  // 📂 저장소에서 다크모드 설정값 읽어오기
+  Future<void> _initTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDarkMode = prefs.getBool('isDarkMode') ?? false; // 기본값 false
+    setState(() {
+      _themeMode = isDarkMode ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
+
+  // 🔥 설정창에서 테마를 바꿀 때 실행될 함수
   void _updateThemeMode(bool isDarkMode) {
     setState(() {
       _themeMode = isDarkMode ? ThemeMode.dark : ThemeMode.light;
@@ -65,9 +80,7 @@ class _SingleCookMasterAppState extends State<SingleCookMasterApp> {
     return MaterialApp(
       title: '자취요리 마스터',
       debugShowCheckedModeBanner: false,
-
-      // 🔥 테마 설정의 핵심 3요소
-      themeMode: _themeMode,
+      themeMode: _themeMode, // 🔥 현재 상태 반영
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
@@ -79,8 +92,7 @@ class _SingleCookMasterAppState extends State<SingleCookMasterApp> {
         brightness: Brightness.dark,
         colorSchemeSeed: Colors.orange,
       ),
-
-      // 🔥 MainScreen에 테마 변경 함수를 전달합니다.
+      // MainScreen에 테마 변경 함수 전달
       home: MainScreen(onThemeChanged: _updateThemeMode),
     );
   }
