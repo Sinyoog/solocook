@@ -13,18 +13,23 @@ dependencies:
   # 데이터 저장 및 경로
   sqflite: ^2.3.0
   path: ^1.8.3
-  
+  sqflite_common_ffi: ^2.4.0+3
+
   # 카메라 및 이미지 처리
   image_picker: ^1.0.4
   google_mlkit_text_recognition: ^0.11.0
-  
-  # 알림 및 UI
-  flutter_local_notifications: ^17.2.1
-  percent_indicator: ^4.2.3
-  sqflite_common_ffi: ^2.4.0+3
-  timezone: ^0.9.4
+
+  # Firebase
+  firebase_core: 4.8.0
   cloud_firestore: ^6.4.0
+
+  # 알림
+  flutter_local_notifications: ^17.2.1
+  timezone: ^0.9.4
   permission_handler: ^12.0.1
+
+  # 기타 UI / 유틸
+  percent_indicator: ^4.2.3
   shared_preferences: ^2.5.5
   flutter_ringtone_player: ^4.0.0+4
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import '../services/timer_service.dart';
 
 class TimerView extends StatefulWidget {
   final String menuName;
@@ -13,60 +14,82 @@ class TimerView extends StatefulWidget {
 }
 
 class _TimerViewState extends State<TimerView> {
-  late int _remainingSeconds;
-  Timer? _timer;
-  bool _isRunning = false;
+  final _timerService = TimerService();
+  StreamSubscription<int>? _tickSub;
+  StreamSubscription<String>? _finishSub;
+
+  // 현재 화면에 표시할 값 (서비스 상태 반영)
+  late int _displaySeconds;
+  late bool _isRunning;
 
   @override
   void initState() {
     super.initState();
-    _remainingSeconds = widget.totalSeconds;
+
+    // 🔥 서비스가 이미 이 메뉴 타이머를 돌고 있으면 그 상태 이어받기
+    if (_timerService.isRunning && _timerService.menuName == widget.menuName) {
+      _displaySeconds = _timerService.remainingSeconds;
+      _isRunning = true;
+    } else {
+      _displaySeconds = widget.totalSeconds;
+      _isRunning = false;
+    }
+
+    // 매초 업데이트 구독
+    _tickSub = _timerService.tickStream.listen((seconds) {
+      if (!mounted) return;
+      // 이 화면의 메뉴와 현재 실행 중인 메뉴가 같을 때만 업데이트
+      if (_timerService.menuName == widget.menuName) { // 🔥 같은 메뉴일 때만 업데이트
+        setState(() {
+          _displaySeconds = seconds;
+          _isRunning = _timerService.isRunning;
+        });
+      }
+    });
+
+    // 완료 이벤트 구독
+    _finishSub = _timerService.finishStream.listen((finishedMenu) {
+      if (!mounted) return;
+      if (finishedMenu == widget.menuName) {
+        setState(() {
+          _displaySeconds = 0;
+          _isRunning = false;
+        });
+        _showFinishDialog();
+      }
+    });
   }
 
-  // 타이머 작동 로직
   void _toggleTimer() {
     if (_isRunning) {
-      _timer?.cancel();
+      _timerService.pause();
+      setState(() => _isRunning = false);
     } else {
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_remainingSeconds > 0) {
-          setState(() => _remainingSeconds--);
-        } else {
-          _timer?.cancel();
-          setState(() => _isRunning = false);
-          _showFinishDialog();
-        }
-      });
+      _timerService.start(widget.menuName, _displaySeconds);
+      setState(() => _isRunning = true);
     }
-    setState(() => _isRunning = !_isRunning);
   }
 
-  // 초기화 로직 (애니메이션 수치도 초기화됨)
   void _resetTimer() {
-    _timer?.cancel();
+    _timerService.reset();
     setState(() {
-      _remainingSeconds = widget.totalSeconds;
+      _displaySeconds = widget.totalSeconds;
       _isRunning = false;
     });
   }
 
   void _showFinishDialog() {
-    FlutterRingtonePlayer().playAlarm();
-
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) {
-        // 🔥 변수 선언(Timer? autoCloseTimer =) 부분을 지우고 Timer만 실행하세요.
         Timer(const Duration(seconds: 5), () {
-          if (Navigator.canPop(context)) {
+          if (context.mounted && Navigator.canPop(context)) {
             Navigator.pop(context);
           }
         });
-
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -74,8 +97,7 @@ class _TimerViewState extends State<TimerView> {
               const SizedBox(height: 15),
               Text(
                 "${widget.menuName} 완료!",
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 5),
               const Text("화면을 누르면 알람이 꺼집니다."),
@@ -91,14 +113,18 @@ class _TimerViewState extends State<TimerView> {
 
   @override
   void dispose() {
-    _timer?.cancel(); // 화면 나갈 때 타이머 해제
+    // 🔥 화면 닫혀도 타이머 서비스는 계속 실행
+    // 구독만 해제 (메모리 누수 방지)
+    _tickSub?.cancel();
+    _finishSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 진행률 계산 (1.0에서 0.0으로 줄어듦)
-    double progress = _remainingSeconds / widget.totalSeconds;
+    double progress = widget.totalSeconds > 0
+        ? (_displaySeconds / widget.totalSeconds).clamp(0.0, 1.0)
+        : 0.0;
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.menuName)),
@@ -106,7 +132,32 @@ class _TimerViewState extends State<TimerView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // --- 원형 애니메이션 부분 ---
+            if (_isRunning)
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.notifications_active, color: Colors.orange, size: 16),
+                    SizedBox(width: 6),
+                    Text(
+                      "앱을 닫아도 알림창에서 확인 가능합니다",
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             Stack(
               alignment: Alignment.center,
               children: [
@@ -114,29 +165,27 @@ class _TimerViewState extends State<TimerView> {
                   width: 280,
                   height: 280,
                   child: CircularProgressIndicator(
-                    value: progress, // 시간에 따라 줄어드는 값
+                    value: progress,
                     strokeWidth: 12,
                     backgroundColor: Colors.grey[200],
                     color: Colors.orange,
                   ),
                 ),
-                // 중앙 시간 표시
                 Text(
-                  '${(_remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}',
+                  '${(_displaySeconds ~/ 60).toString().padLeft(2, '0')}:${(_displaySeconds % 60).toString().padLeft(2, '0')}',
                   style: const TextStyle(
-                      fontSize: 60,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace' // 숫자가 흔들리지 않게 고정폭 폰트 권장
+                    fontSize: 60,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'monospace',
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 60),
-            // --- 버튼 영역 ---
+
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 시작/일시정지 버튼
                 ElevatedButton.icon(
                   onPressed: _toggleTimer,
                   icon: Icon(_isRunning ? Icons.pause : Icons.play_arrow),
@@ -145,11 +194,13 @@ class _TimerViewState extends State<TimerView> {
                     backgroundColor: _isRunning ? Colors.grey[400] : Colors.orange,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                    textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    textStyle: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 20),
-                // 초기화 버튼
                 OutlinedButton.icon(
                   onPressed: _resetTimer,
                   icon: const Icon(Icons.refresh),

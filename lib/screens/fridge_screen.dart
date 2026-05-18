@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/text_recognition_service.dart';
 import '../services/database_service.dart';
 import '../models/food_model.dart';
@@ -27,7 +28,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
     _refreshFoodList();
   }
 
-  // [수정] 데이터 로딩 상태를 명확히 하기 위해 Future를 재할당
   void _refreshFoodList() {
     setState(() {
       _foodListFuture = _dbService.getFoods();
@@ -126,7 +126,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
                 ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.isNotEmpty && dateController.text.length >= 6) {
-                      // [중요] 저장이 끝날 때까지 기다린 후 팝업을 닫습니다.
                       await _saveFood(nameController.text, dateController.text, tempAlarmOn);
                       if (context.mounted) Navigator.pop(context);
                     }
@@ -168,30 +167,41 @@ class _FridgeScreenState extends State<FridgeScreen> {
         category: '기타',
       ));
 
-      // 2. 알림 예약 로직 수정
-      try {
-        if (alarmOn) {
-          final notificationDate = expiry.subtract(const Duration(days: 1));
-          // 기본 알림 시간: 유통기한 하루 전 오전 9시
-          DateTime scheduledAt = DateTime(notificationDate.year, notificationDate.month, notificationDate.day, 9, 0);
+      // 2. 🔥 [수정] SharedPreferences에서 사용자가 설정한 알림 시간을 읽어서 반영
+      if (alarmOn) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final hour = prefs.getInt('notificationHour') ?? 9;
+          final minute = prefs.getInt('notificationMinute') ?? 0;
 
-          // 🔥 [수정] 만약 예약 시간(오전 9시)이 이미 지났다면?
+          // 유통기한 하루 전 날짜 계산
+          final notificationDate = expiry.subtract(const Duration(days: 1));
+
+          // 사용자가 설정한 시/분으로 알림 시간 구성
+          DateTime scheduledAt = DateTime(
+            notificationDate.year,
+            notificationDate.month,
+            notificationDate.day,
+            hour,   // 🔥 설정값 반영
+            minute, // 🔥 설정값 반영
+          );
+
+          // 설정한 시간이 이미 지났으면 5초 뒤에 즉시 알림 (테스트/당일 등록 대응)
           if (scheduledAt.isBefore(DateTime.now())) {
-            // 오늘이 유통기한 전날인데 이미 9시가 넘었거나, 유통기한 당일인 경우
-            // 테스트 및 사용자 인지를 위해 '지금부터 5초 뒤'에 알림이 오도록 설정합니다.
             scheduledAt = DateTime.now().add(const Duration(seconds: 5));
           }
 
           await NotificationService().scheduleNotification(
-            id: DateTime.now().millisecond, // 고유 ID 부여
-            title: "유통기한 임박!",
-            body: "🥛 $name의 유통기한이 하루 남았습니다!",
+            id: name.hashCode, // 🔥 이름 기반 고유 ID (같은 식품 재등록 시 덮어쓰기)
+            title: "🧊 유통기한 임박!",
+            body: "$name[${expiry.toString().split(' ')[0]}] (1일 전)",
             scheduledDate: scheduledAt,
           );
-          debugPrint("✅ 알림 예약 완료: $scheduledAt");
+
+          debugPrint("✅ 알림 예약: $name → $scheduledAt");
+        } catch (e) {
+          debugPrint("알림 에러: $e");
         }
-      } catch (e) {
-        debugPrint("알림 에러: $e");
       }
 
       // 3. UI 갱신
@@ -214,11 +224,9 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. 현재 테마가 다크모드인지 확인
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      // 🔥 배경색을 테마에 맞게 변경 (흰색 고정 제거)
       backgroundColor: isDarkMode ? Colors.grey[900] : Colors.white,
       body: FutureBuilder<List<FoodModel>>(
         future: _foodListFuture,
@@ -227,7 +235,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
             return const Center(child: CircularProgressIndicator(color: Colors.orange));
           }
 
-          // 2. 데이터가 없을 때 텍스트 색상 대응
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(
               child: Text(
@@ -273,12 +280,10 @@ class _FridgeScreenState extends State<FridgeScreen> {
                 child: Card(
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   elevation: 1,
-                  // 🔥 카드 배경색도 다크모드용으로 대응
                   color: isDarkMode ? Colors.grey[850] : Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   child: ListTile(
                     leading: CircleAvatar(
-                      // 🔥 아이콘 배경색 대응
                       backgroundColor: food.isAlarmOn
                           ? (isDarkMode ? Colors.orange.withValues(alpha: 0.2) : Colors.orange[50])
                           : (isDarkMode ? Colors.grey[800] : Colors.grey[100]),
@@ -288,10 +293,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
                         size: 20,
                       ),
                     ),
-                    title: Text(
-                        food.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold)
-                    ),
+                    title: Text(food.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(
                       "기한: ${food.expiryDate.toString().split(' ')[0]}",
                       style: TextStyle(color: isDarkMode ? Colors.grey[400] : Colors.grey[600]),
