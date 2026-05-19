@@ -5,6 +5,7 @@ import '../services/text_recognition_service.dart';
 import '../services/database_service.dart';
 import '../models/food_model.dart';
 import '../services/notification_service.dart';
+import 'recipe_recommend_screen.dart';
 
 class FridgeScreen extends StatefulWidget {
   final String searchQuery;
@@ -159,7 +160,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
       DateTime expiry = DateTime.parse(formattedDate);
 
-      // 1. DB 저장
       await _dbService.insertFood(FoodModel(
         name: name,
         expiryDate: expiry,
@@ -167,32 +167,27 @@ class _FridgeScreenState extends State<FridgeScreen> {
         category: '기타',
       ));
 
-      // 2. 🔥 [수정] SharedPreferences에서 사용자가 설정한 알림 시간을 읽어서 반영
       if (alarmOn) {
         try {
           final prefs = await SharedPreferences.getInstance();
           final hour = prefs.getInt('notificationHour') ?? 9;
           final minute = prefs.getInt('notificationMinute') ?? 0;
 
-          // 유통기한 하루 전 날짜 계산
           final notificationDate = expiry.subtract(const Duration(days: 1));
-
-          // 사용자가 설정한 시/분으로 알림 시간 구성
           DateTime scheduledAt = DateTime(
             notificationDate.year,
             notificationDate.month,
             notificationDate.day,
-            hour,   // 🔥 설정값 반영
-            minute, // 🔥 설정값 반영
+            hour,
+            minute,
           );
 
-          // 설정한 시간이 이미 지났으면 5초 뒤에 즉시 알림 (테스트/당일 등록 대응)
           if (scheduledAt.isBefore(DateTime.now())) {
             scheduledAt = DateTime.now().add(const Duration(seconds: 5));
           }
 
           await NotificationService().scheduleNotification(
-            id: name.hashCode, // 🔥 이름 기반 고유 ID (같은 식품 재등록 시 덮어쓰기)
+            id: name.hashCode,
             title: "🧊 유통기한 임박!",
             body: "$name[${expiry.toString().split(' ')[0]}] (1일 전)",
             scheduledDate: scheduledAt,
@@ -204,7 +199,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
         }
       }
 
-      // 3. UI 갱신
       _refreshFoodList();
 
       if (mounted) {
@@ -244,7 +238,9 @@ class _FridgeScreenState extends State<FridgeScreen> {
             );
           }
 
-          final filteredFoods = snapshot.data!.where((food) {
+          final allFoods = snapshot.data!;
+
+          final filteredFoods = allFoods.where((food) {
             return food.name.contains(widget.searchQuery);
           }).toList();
 
@@ -258,10 +254,38 @@ class _FridgeScreenState extends State<FridgeScreen> {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            itemCount: filteredFoods.length,
+            // 🔥 상단 추천 버튼 공간 확보
+            padding: const EdgeInsets.only(top: 10, bottom: 80),
+            itemCount: filteredFoods.length + 1, // +1: 상단 추천 버튼
             itemBuilder: (context, index) {
-              final food = filteredFoods[index];
+              // 🔥 첫 번째 아이템 = 레시피 추천 버튼
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => RecipeRecommendScreen(foods: allFoods),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.restaurant_menu, color: Colors.white),
+                    label: const Text(
+                      "냉장고 재료로 만들 수 있는 요리 보기",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                );
+              }
+
+              final food = filteredFoods[index - 1]; // 인덱스 보정
 
               return Dismissible(
                 key: Key("${food.id}_${food.expiryDate.millisecondsSinceEpoch}"),
