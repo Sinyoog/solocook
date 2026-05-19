@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/recipe_data.dart';
+import '../widgets/timer_card.dart';
 import 'timer_view.dart';
 import '../services/firebase_service.dart';
 
@@ -10,95 +11,65 @@ class TimerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. FutureBuilder 대신 StreamBuilder를 사용하여 실시간 감시 모드로 전환!
     return StreamBuilder<Map<String, int>>(
-      stream: FirebaseService.getClickCountsStream(), // 🔥 실시간 전화를 연결한 상태
+      stream: FirebaseService.getClickCountsStream(),
       builder: (context, snapshot) {
-        // 처음 연결을 시도할 때 로딩 표시
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Colors.orange));
         }
 
-        // 서버에서 온 최신 데이터 (실시간으로 계속 업데이트됨)
         final clickData = snapshot.data ?? {};
 
-        // 2. 전체 데이터를 복사하여 최신 클릭수 기준으로 실시간 정렬
         final allPresets = List.from(RecipeData.timerPresets);
         allPresets.sort((a, b) {
           int countA = clickData[a['menu']] ?? 0;
           int countB = clickData[b['menu']] ?? 0;
-          return countB.compareTo(countA); // 클릭수 많은 순
+          return countB.compareTo(countA);
         });
 
-        // 3. 정렬된 리스트에서 검색어 필터링
         final filteredPresets = allPresets.where((item) {
           final menuName = item['menu']?.toString() ?? '';
           return menuName.contains(searchQuery);
         }).toList();
 
-        return Scaffold(
-          body: filteredPresets.isEmpty
-              ? const Center(child: Text("검색 결과가 없습니다."))
-              : ListView.builder(
-            itemCount: filteredPresets.length,
-            itemBuilder: (context, index) {
-              final item = filteredPresets[index];
-              final clickCount = clickData[item['menu']] ?? 0;
+        if (filteredPresets.isEmpty) {
+          return const Center(child: Text("검색 결과가 없습니다."));
+        }
 
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: const Icon(Icons.timer_outlined, color: Colors.orange),
-                  // TimerScreen의 ListTile 내부 title 부분 수정
-                  title: Row(
-                    children: [
-                      // 1. Expanded를 사용하여 글자가 차지할 수 있는 만큼만 차지하게 제한합니다.
-                      Expanded(
-                        child: Text(
-                          item['menu'] ?? '메뉴명 없음',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                          // 2. 글자가 너무 길면 '...'으로 생략하거나 다음 줄로 넘깁니다.
-                          overflow: TextOverflow.ellipsis, // 말줄임표(...) 표시
-                          maxLines: 1, // 한 줄로 고정하고 싶을 때
-                        ),
-                      ),
-                      if (clickCount > 0) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.orange[100],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            "🔥 $clickCount",
-                            style: const TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ]
-                    ],
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          itemCount: filteredPresets.length,
+          itemBuilder: (context, index) {
+            final item = filteredPresets[index];
+            final int totalSeconds = item['time'] ?? 0;
+            final int minutes = totalSeconds ~/ 60;
+            final int seconds = totalSeconds % 60;
+            final clickCount = clickData[item['menu']] ?? 0;
+
+            // 인기 뱃지 표시용 메뉴명
+            final String menuDisplay = clickCount > 0
+                ? "${item['menu']}  🔥$clickCount"
+                : item['menu'] ?? '메뉴명 없음';
+
+            final String timeText = "${minutes}분 ${seconds}초";
+
+            return TimerCard(
+              menu: menuDisplay,
+              timeText: timeText,
+              onTap: () {
+                FirebaseService.addRecipeClick(item['menu'] ?? 'unknown_timer');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TimerView(
+                      menuName: item['menu'] ?? '타이머',
+                      totalSeconds: totalSeconds,
+                    ),
                   ),
-                  subtitle: Text(item['category'] ?? '카테고리 없음'),
-                  trailing: Text(
-                      "${(item['time'] ?? 0) ~/ 60}분 ${(item['time'] ?? 0) % 60}초"),
-                  onTap: () {
-                    // 서버에 클릭 기록 전송
-                    FirebaseService.addRecipeClick(item['menu'] ?? 'unknown_timer');
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => TimerView(
-                          menuName: item['menu'] ?? '타이머',
-                          totalSeconds: item['time'] ?? 0,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
+                );
+              },
+            );
+          },
         );
       },
     );

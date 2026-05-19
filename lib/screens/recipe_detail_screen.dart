@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import '../data/recipe_data.dart';
+import '../widgets/substitution_guide.dart';
 
 class RecipeDetailScreen extends StatefulWidget {
   final Map<String, dynamic> recipe;
@@ -67,30 +69,22 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       if (_remainingSeconds > 0) {
         setState(() => _remainingSeconds--);
       } else {
-        // 🔥 타이머 종료 로직 호출
         _handleTimerFinished();
       }
     });
   }
 
-  // 🔥 냄비 요리 타이머 종료 처리 (5초 알람)
   void _handleTimerFinished() {
     _timer?.cancel();
     setState(() => _isTimerRunning = false);
-
-    // 1. 알람 소리 재생
     FlutterRingtonePlayer().playAlarm();
-
-    // 2. 5초 뒤 자동 다음 단계 이동 (터치 안 했을 경우)
     Future.delayed(const Duration(seconds: 5), () {
-      // 5초 후에도 여전히 해당 스텝에 머물러 있다면 (소리가 울리는 중이라면)
       if (_activeStep != null && _remainingSeconds == 0) {
         _stopAlarmAndNext();
       }
     });
   }
 
-  // 🔥 알람 끄고 다음으로 넘어가는 공통 함수
   void _stopAlarmAndNext() {
     FlutterRingtonePlayer().stop();
     _nextStep();
@@ -126,10 +120,38 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     );
   }
 
+  // 🔥 재료 대체 가이드 다이얼로그 호출
+  void _showSubstitutionGuide(String ingredient) {
+    // recipe_data의 substitutionGuide에 있는 재료명과 매칭
+    final String cleanIngredient = ingredient.split('(')[0].trim(); // 괄호 앞까지만
+    final bool hasGuide = RecipeData.substitutionGuide.keys.any(
+          (key) => cleanIngredient.contains(key),
+    );
+
+    if (!hasGuide) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("이 재료는 대체 가이드가 없습니다."),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+
+    final String matchedKey = RecipeData.substitutionGuide.keys.firstWhere(
+          (key) => cleanIngredient.contains(key),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => SubstitutionGuide(ingredient: matchedKey),
+    );
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
-    FlutterRingtonePlayer().stop(); // 화면 나가면 소리 끄기
+    FlutterRingtonePlayer().stop();
     super.dispose();
   }
 
@@ -144,12 +166,9 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          // 🔥 [수정] 타이머가 0이고 소리가 울리는 중(5초 대기 중)일 때 터치 처리
           if (_activeStep != null && !_isTimerRunning && _remainingSeconds == 0) {
             _stopAlarmAndNext();
-          }
-          // 일반적인 다음 단계 이동 (타이머가 없는 단계 또는 렌지 요리)
-          else if (_activeStep != null && !_isTimerRunning) {
+          } else if (_activeStep != null && !_isTimerRunning) {
             _nextStep();
           }
         },
@@ -164,11 +183,60 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                         style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     const Text("필요 재료", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 5),
-                    Text(ingredients.join(', '),
-                        style: TextStyle(fontSize: 15, color: isDarkMode ? Colors.white70 : Colors.black87)),
+                    const SizedBox(height: 8),
+
+                    // 🔥 재료 목록 - 각 재료마다 대체 가이드 버튼 추가
+                    ...ingredients.map((ingredient) {
+                      final String ingStr = ingredient.toString();
+                      final String cleanIng = ingStr.split('(')[0].trim();
+                      final bool hasGuide = RecipeData.substitutionGuide.keys.any(
+                            (key) => cleanIng.contains(key),
+                      );
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.circle, size: 6, color: Colors.orange),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                ingStr,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: isDarkMode ? Colors.white70 : Colors.black87,
+                                ),
+                              ),
+                            ),
+                            // 대체 가이드가 있는 재료만 버튼 표시
+                            if (hasGuide)
+                              GestureDetector(
+                                onTap: () => _showSubstitutionGuide(ingStr),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange[50],
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                                  ),
+                                  child: const Text(
+                                    "대체",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+
                     const Divider(height: 40),
                   ],
+
                   const Text("조리 순서", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
                   ...List.generate(steps.length, (index) {
@@ -213,7 +281,11 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                                       Expanded(
                                         child: Text(
                                           "조리 후 다음 단계로 넘어가려면 화면을 터치하세요",
-                                          style: TextStyle(color: isDarkMode ? Colors.blue[200] : Colors.blue[700], fontSize: 12, fontWeight: FontWeight.bold),
+                                          style: TextStyle(
+                                            color: isDarkMode ? Colors.blue[200] : Colors.blue[700],
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -232,11 +304,15 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                    _remainingSeconds > 0
-                                        ? "${_remainingSeconds ~/ 60}분 ${_remainingSeconds % 60}초 남음"
-                                        : "조리 완료! 알람 울리는 중...",
-                                    style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                              ]
+                                  _remainingSeconds > 0
+                                      ? "${_remainingSeconds ~/ 60}분 ${_remainingSeconds % 60}초 남음"
+                                      : "조리 완료! 알람 울리는 중...",
+                                  style: const TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -255,10 +331,13 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   child: ElevatedButton(
                     onPressed: _startCooking,
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                    child: const Text("조리 시작",
-                        style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
+                      backgroundColor: Colors.orange,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                    child: const Text(
+                      "조리 시작",
+                      style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ),
